@@ -14,6 +14,8 @@ services:
       - "24224:24224/udp"
     networks:
       - opensearch
+    environment:
+      - host_placeholder=opensearch-node1
     depends_on:
       opensearch-node1:
         condition: service_healthy
