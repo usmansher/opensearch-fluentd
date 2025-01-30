@@ -2,6 +2,7 @@ version: '3'
 
 services:
   fluentd:
+    container_name: fluentd
     build: ./fluentd
     command: 'fluentd -c /fluentd/etc/fluentd.conf -v'
     volumes:
@@ -93,7 +94,7 @@ services:
     image: opensearchproject/opensearch-dashboards:latest
     container_name: opensearch-dashboards
     environment:
-      OPENSEARCH_HOSTS: '["http://opensearch-node1:9200","http://opensearch-node2:9200"]'
+      OPENSEARCH_HOSTS: '["http://opensearch-node2:9200","http://opensearch-node1:9600"]'
       SERVER_BASEPATH: '/dashboards'
       SERVER_REWRITEBASEPATH: 'true'
       DISABLE_SECURITY_DASHBOARDS_PLUGIN: 'true'
@@ -111,6 +112,21 @@ services:
       start_period: 5s
       interval: 5s
       retries: 30
+  fluentd-test:
+    image: busybox
+    command: /bin/sh -c "while true; do echo 'Hello from Fluentd Test'; sleep 5; done"
+    depends_on:
+      - fluentd
+      - opensearch-node1
+      - opensearch-node2
+      - opensearch-dashboards
+    networks:
+      - opensearch
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        tag: docker.fluentd-test
 
 
 volumes:
