@@ -1,0 +1,135 @@
+version: '3'
+
+services:
+  fluentd:
+    build: ./fluentd
+    command: 'fluentd -c /fluentd/etc/fluentd.conf -v'
+    volumes:
+      - "./fluentd-pos:/fluentd/pos"
+      - "./log:/fluentd/log"
+      - "./fluentd.conf:/fluentd/etc/fluentd.conf"
+    restart: "always"
+    ports:
+      - "24224:24224"        # Fluentd listens on this port for incoming logs
+      - "24224:24224/udp"
+    networks:
+      - opensearch
+    depends_on:
+      opensearch-node1:
+        condition: service_healthy
+      opensearch-node2:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  opensearch-node1:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch-node1
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node1
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "DISABLE_SECURITY_PLUGIN=true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data1:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"  # REST API
+      - "9600:9600"  # Performance Analyzer
+    networks:
+      - opensearch
+    healthcheck:
+      test: /bin/bash -c "</dev/tcp/localhost/9200"
+      start_period: 5s
+      interval: 5s
+      retries: 30
+
+  opensearch-node2:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch-node2
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node2
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "DISABLE_SECURITY_PLUGIN=true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data2:/usr/share/opensearch/data
+    ports:
+      - "9201:9200"  # REST API for node2 (optional)
+      - "9601:9600"  # Performance Analyzer for node2 (optional)
+    networks:
+      - opensearch
+    healthcheck:
+      test: /bin/bash -c "</dev/tcp/localhost/9200"
+      start_period: 5s
+      interval: 5s
+      retries: 30
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: opensearch-dashboards
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch-node1:9200","http://opensearch-node2:9200"]'
+      SERVER_BASEPATH: '/dashboards'
+      SERVER_REWRITEBASEPATH: 'true'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: 'true'
+    networks:
+      - opensearch
+    depends_on:
+      opensearch-node1:
+        condition: service_healthy
+      opensearch-node2:
+        condition: service_healthy
+    ports:
+      - "5601:5601"  # Dashboards
+    healthcheck:
+      test: /bin/bash -c "</dev/tcp/localhost/5601"
+      start_period: 5s
+      interval: 5s
+      retries: 30
+  log_generator:
+    image: busybox
+    container_name: log_generator
+    networks:
+      - opensearch
+    depends_on:
+      - fluentd
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: fluentd:24224
+        tag: docker.log_generator
+    command: sh -c "while true; do echo 'Log message from log_generator at $(date)'; sleep 5; done"
+
+
+volumes:
+  opensearch-data1:
+  opensearch-data2:
+  fluentd-pos:
+  log:
+
+networks:
+  opensearch:
+    external: true
