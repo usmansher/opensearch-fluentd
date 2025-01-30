@@ -109,19 +109,6 @@ services:
       start_period: 5s
       interval: 5s
       retries: 30
-  log_generator:
-    image: busybox
-    container_name: log_generator
-    networks:
-      - opensearch
-    depends_on:
-      - fluentd
-    logging:
-      driver: fluentd
-      options:
-        fluentd-address: fluentd:24224
-        tag: docker.log_generator
-    command: sh -c "while true; do echo 'Log message from log_generator at $(date)'; sleep 5; done"
 
 
 volumes:
